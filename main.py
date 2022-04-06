@@ -1,24 +1,11 @@
-# from pdfminer.high_level import extract_text
-
-
-# text = extract_text("NEPP-CP-2015-Campola-Paper-DW-NSREC-TN24941.pdf")
-
-# buf = ""
-# for line in text:
-#     buf += line
-#     if line == "\n" and len(buf) > 1:
-#         print(buf)
-#         buf = "" 
-
-# import webbrowser
-# import tabula
-# import tabulate
-
-# df = tabula.read_pdf('NEPP-CP-2015-Campola-Paper-DW-NSREC-TN24941.pdf',pages="3")
-# print(tabulate(df))
+import tables as tb
+from PyPDF2 import PdfFileReader
+import pandas
 import sqlite3
 from sqlite3 import Error
-from turtle import title
+import os
+from os import listdir
+from os.path import isfile, join
 
 def connect_to_database(path):
     conn = None
@@ -26,71 +13,55 @@ def connect_to_database(path):
         conn = sqlite3.connect(path)
     except Error as e:
         print(e)
-    finally:
-        if conn:
-            conn.close()
+    return conn
+
+def create_tables(cursor):
+    paper_table = """ CREATE TABLE IF NOT EXISTS paper_table (
+                      id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                      paper_name VARCHAR(1024)                      
+                  );"""
+    cursor.execute(paper_table)
+
+    rad_table = """ CREATE TABLE IF NOT EXISTS rad_table (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                    part_number VARCHAR(255) NOT NULL, 
+                    manufacturer VARCHAR(255) NOT NULL,
+                    tester_id VARCHAR(255),
+                    device_function VARCHAR(255) NOT NULL,
+                    category VARCHAR(255),
+                    technology VARCHAR(255),
+                    principal_investigator VARCHAR(255),
+                    results VARCHAR(1024) NOT NULL,
+                    in_spec BOOL,
+                    dose_rate VARCHAR(255),
+                    proton_energy VARCHAR(255),
+                    degradation_level VARCHAR(255),
+                    proton_fluence VARCHAR(255),
+                    misc_info VARCHAR(1024),
+                    source_paper INTEGER NOT NULL
+                    ); """
+
+    cursor.execute(rad_table)
+
+    # holds info on all abbreviations that are used in the documents 
+    # type specifies whether the abbreviation is for a term or for a principal investigator
+    abbreviation_table = """ CREATE TABLE IF NOT EXISTS abbreviation_table (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        abbreviation VARCHAR(255) NOT NULL,
+                        expansion VARCHAR(255) NOT NULL,
+                        type VARCHAR(255) NOT NULL,
+                        source_papers VARCHAR(1024) NOT NULL
+                        ); """
+    cursor.execute(abbreviation_table)
+    
+    # categories = ["operational_amplifiers", "memory", "transistors", "voltage_references", "voltage_regulators", ""]
+
+    # for cat in categories:
 
 
-import camelot
-from camelot.handlers import PDFHandler
-import os 
-import webbrowser
-import math
-from PyPDF2 import PdfFileReader
-import pandas
 
 
-# original pulled from https://stackoverflow.com/questions/58185404/python-pdf-parsing-with-camelot-and-extract-the-table-title
-# code has been modified to better handle target documents
-# Helper methods for _bbox
-def top_mid(bbox):
-    return ((bbox[0]+bbox[2])/2, bbox[3])
 
-def bottom_mid(bbox):
-    return ((bbox[0]+bbox[2])/2, bbox[1])
-
-def distance(p1, p2):
-    return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
-
-def get_closest_text(table, htext_objs):
-    min_distance = 100  # Cause 9's are big :)
-    best_guess = None
-    table_flag = False
-    table_mid = top_mid(table._bbox)  # Middle of the TOP of the table
-    for obj in htext_objs:
-        text_mid = bottom_mid(obj.bbox)  # Middle of the BOTTOM of the text
-        d = distance(text_mid, table_mid)
-        if d < min_distance and len(obj.get_text().strip()) < 50:
-            # print(best_guess)
-            if table_flag:
-                best_guess += f" {obj.get_text().strip()}"
-                return best_guess
-            else:
-                best_guess = obj.get_text().strip()
-
-            if "table" in best_guess.lower():
-                table_flag = True
-
-            min_distance = d
-    if not table_flag:
-        return "" 
-    return best_guess
-
-def get_tables_and_titles(pdf_filename, page):
-    """Here's my hacky code for grabbing tables and guessing at their titles"""
-    my_handler = PDFHandler(pdf_filename)  # from camelot.handlers import PDFHandler
-    tables = camelot.read_pdf(pdf_filename, pages=f'{page}', line_scale=40, flavor = 'lattice')
-    print('Extracting {:d} tables...'.format(tables.n))
-    titles = []
-    with camelot.utils.TemporaryDirectory() as tempdir:
-        for table in tables:
-            my_handler._save_page(pdf_filename, table.page, tempdir)
-            tmp_file_path = os.path.join(tempdir, f'page-{table.page}.pdf')
-            layout, dim = camelot.utils.get_page_layout(tmp_file_path)
-            htext_objs = camelot.utils.get_text_objects(layout, ltype="horizontal_text")
-            tmp = get_closest_text(table, htext_objs)
-            titles.append(tmp)  # Might be None
-    return titles, tables
 
 
 def is_table_empty(table):
@@ -99,42 +70,115 @@ def is_table_empty(table):
     return False
 
 
+def generate_abbreviations_list(table):
+    abbrev_to_text_list = []
+    for index, row in table.iterrows():
+        for col in row:
+            abbrev = ""
+            full_text = ""
+            equals_flag = False
+            parantheses_lock = False
+            for char in col:
+                if char == "(":
+                    parantheses_lock = True
+                elif char == ")":
+                    parantheses_lock = False
+                if char == "\n" and not parantheses_lock:
+                    abbrev_to_text_list.append([abbrev, " ".join(full_text.split())])
+                    abbrev = ""
+                    full_text = ""
+                    equals_flag = False
+                elif char != "=" and not equals_flag:
+                    abbrev += char
+                elif char != "=" and equals_flag:
+                    abbrev = " ".join(abbrev.split())
+                    full_text += char
+                elif char == "=":
+                    equals_flag = True
+    return abbrev_to_text_list
+
+def abbreviation_expansion(abbrev_list, table):
+    for index, row in table.iterrows():
+        for col in row:
+            for abbrev in abbrev_list:
+                col = col.replace(abbrev[0],abbrev[1])
+    return table
 
 
+def find_table_type(title):
+    title = title.lower()
+    if "principal" in title or "investigator" in title:
+        return "principal_investigator"
+    elif "acronym" in title or "abbreviations" in title:
+        return "abbreviation"
+    elif "tid" in title or "see" in title or "dd" in title or "seu" in title or "let" in title:
+        return "rad"
+    return None
 
-pdf_name =  'NEPP-CP-2015-Campola-Paper-DW-NSREC-TN24941.pdf'
+def get_pdf_title(path):
+    return os.path.basename(path)
+
+def get_all_files(path):
+    return [f for f in listdir(path) if isfile(join(path,f))]
+    
+# def find_header(table):
+#     for index, row in table.iterrows():
+#         print(row)
+
+# work flow: get document, run through priocessing -> convert to temporary csv
+# -> check/correct csv (manually rn) 
+# -> add to radiation database (split up based on category (TID, SEE, etc.), if two papers for given value, put both down and cite both)
+# (each paper gets its own entry into database, even if part is repeated, unique ids are generated for each new part in database that is referenced by part databases) 
+# -> get parameters from manufacturer (based on category, get relevant info) 
+# -> add to part database and back reference the radiation (list unique ids)
+
+pdf_name =  'docs/NEPP-CP-2015-Campola-Paper-DW-NSREC-TN24941.pdf'
+print(get_all_files("docs/"))
 pdf = PdfFileReader(open(pdf_name,'rb'))
 num_pages = pdf.getNumPages()
-# num_pages = 1
+# num_pages = 5
 titles = []
 tables = []
 
+get_pdf_title(pdf_name)
 for page in range(num_pages): 
-    new_titles, new_tables = get_tables_and_titles(pdf_name, page)
+    new_titles, new_tables = tb.get_tables_and_titles(pdf_name, page)
     for ti, ta in zip(new_titles, new_tables):
         if not is_table_empty(ta):
             if ti == '':
-                print(titles[len(titles)-1])
-                tables[len(tables)-1].df =  pandas.concat([tables[len(tables)-1].df, ta.df.drop([0])])
-                # .append(ta.df) #(ta.df)
-                # print(ta.df)
+                tmp = tables[len(tables)-1].df
+                if (ta.df[ta.df != ""].count().to_numpy().sum()/ ta.df[ta.df == ""].count().to_numpy().sum() >= 0.5):
+                    tmp = pandas.concat([tmp, ta.df.drop([0])])
+                    tables[len(tables)-1].df = tmp
             else:
                 titles.append(ti)
                 tables.append(ta)
-
+abbreviations_table = []                
 for ti, ta in zip(titles, tables):
     ta.to_csv(f'{ti}.csv')
 
+input("verify that csvs were properly generated, press enter to continue...")
+
+print("reloading csv information, deleting csvs...")
+for index, ti in enumerate(titles):
+    if os.path.exists(f"{ti}.csv"):
+        tables[index] = pandas.read_csv(f"{ti}.csv")
+        os.remove(f"{ti}.csv")
+
+# for ti, ta in zip(titles, tables):
+#     ta.to_csv(f'{ti}.csv')
+
 print(titles)
 
-# tables[5].to_csv('foo.csv')
-# camelot.plot(abc[0],kind='text').show()
-# input("Press Enter to continue...")
-# abc[0].to_csv('foo.csv')
-# # print(abc[0])
+input("tmp")
+
+
+
 
 
 if __name__ == '__main__':
     path = "main.db"
-    connect_to_database(path)
-
+    conn = connect_to_database(path)
+    cursor = conn.cursor()
+    create_tables(cursor)
+    conn.close()
