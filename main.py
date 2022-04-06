@@ -1,4 +1,7 @@
+
 import tables as tb
+from tables import Tables
+
 from PyPDF2 import PdfFileReader
 import pandas
 import sqlite3
@@ -6,6 +9,9 @@ from sqlite3 import Error
 import os
 from os import listdir
 from os.path import isfile, join
+
+import nltk
+# from nltk.tag.stanford import NERTagger
 
 def connect_to_database(path):
     conn = None
@@ -105,28 +111,18 @@ def abbreviation_expansion(abbrev_list, table):
     return table
 
 
-def find_table_type(title):
-    title = title.lower()
-    if "principal" in title or "investigator" in title:
-        return "principal_investigator"
-    elif "acronym" in title or "abbreviations" in title:
-        return "abbreviation"
-    elif "tid" in title or "see" in title or "dd" in title or "seu" in title or "let" in title:
-        return "rad"
-    return None
-
 def get_pdf_title(path):
     return os.path.basename(path)
 
 def get_all_files(path):
     return [f for f in listdir(path) if isfile(join(path,f))]
-    
+
 # def find_header(table):
 #     for index, row in table.iterrows():
 #         print(row)
 
 # work flow: get document, run through priocessing -> convert to temporary csv
-# -> check/correct csv (manually rn) 
+# -> check/correct/remove csv (manually rn) 
 # -> add to radiation database (split up based on category (TID, SEE, etc.), if two papers for given value, put both down and cite both)
 # (each paper gets its own entry into database, even if part is repeated, unique ids are generated for each new part in database that is referenced by part databases) 
 # -> get parameters from manufacturer (based on category, get relevant info) 
@@ -136,9 +132,8 @@ pdf_name =  'docs/NEPP-CP-2015-Campola-Paper-DW-NSREC-TN24941.pdf'
 print(get_all_files("docs/"))
 pdf = PdfFileReader(open(pdf_name,'rb'))
 num_pages = pdf.getNumPages()
-# num_pages = 5
-titles = []
-tables = []
+
+tables_arr = []
 
 get_pdf_title(pdf_name)
 for page in range(num_pages): 
@@ -146,31 +141,56 @@ for page in range(num_pages):
     for ti, ta in zip(new_titles, new_tables):
         if not is_table_empty(ta):
             if ti == '':
-                tmp = tables[len(tables)-1].df
+                tmp = tables_arr[len(tables_arr)-1].table
                 if (ta.df[ta.df != ""].count().to_numpy().sum()/ ta.df[ta.df == ""].count().to_numpy().sum() >= 0.5):
                     tmp = pandas.concat([tmp, ta.df.drop([0])])
-                    tables[len(tables)-1].df = tmp
+                    tables_arr[len(tables_arr)-1].table = tmp.reindex()
             else:
-                titles.append(ti)
-                tables.append(ta)
+                tables_arr.append(Tables(table=ta.df, title=ti))
 abbreviations_table = []                
-for ti, ta in zip(titles, tables):
-    ta.to_csv(f'{ti}.csv')
+
+
+
+# generate csvs for user to check if data parsed properly
+for ti in tables_arr:
+    ti.table.to_csv(f'tmp_csvs/{ti.title}.csv')
 
 input("verify that csvs were properly generated, press enter to continue...")
 
 print("reloading csv information, deleting csvs...")
-for index, ti in enumerate(titles):
-    if os.path.exists(f"{ti}.csv"):
-        tables[index] = pandas.read_csv(f"{ti}.csv")
-        os.remove(f"{ti}.csv")
 
-# for ti, ta in zip(titles, tables):
-#     ta.to_csv(f'{ti}.csv')
+tmp_arr = tables_arr.copy()
+for ti in tables_arr:
+    if os.path.exists(f"tmp_csvs/{ti.title}.csv"):
+        ti.table = pandas.read_csv(f"tmp_csvs/{ti.title}.csv")
+        os.remove(f"tmp_csvs/{ti.title}.csv")
+    else:
+        tmp_arr.remove(ti)
+tables_arr = tmp_arr.copy()
 
-print(titles)
 
-input("tmp")
+tmp_arr = tables_arr.copy()
+for ti in tables_arr:
+    t_type = ti.find_table_type(ti.title)
+    if t_type != None:
+        ti.type= t_type
+    else:
+        print(f"could not find type for table: {ti.title}, dropping")
+        tmp_arr.remove(ti)
+tables_arr = tmp_arr.copy()
+input("press enter to continue...")
+
+
+for ti in tables_arr:
+    if "TABLE IV" in ti.title:
+        print(ti.get_header()) 
+        print(ti.get_row_density(3))
+        # for index, row in ti.table.iterrows():
+        #     print(row)
+
+
+# for ti in tables_arr:
+#     print(ti.title, ti.type)
 
 
 

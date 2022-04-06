@@ -1,8 +1,11 @@
+from cmath import nan
 import camelot
 from camelot.handlers import PDFHandler
 import os 
 import math
-
+import re
+from numpy import NaN
+import pandas
 
 # original pulled from https://stackoverflow.com/questions/58185404/python-pdf-parsing-with-camelot-and-extract-the-table-title
 # code has been modified to better handle target documents
@@ -54,3 +57,37 @@ def get_tables_and_titles(pdf_filename, page):
             tmp = get_closest_text(table, htext_objs)
             titles.append(tmp)  # Might be None
     return titles, tables
+
+class Tables:
+    def __init__(self, table, title, type=None):
+        self.table = table
+        self.title = title
+        self.type = type
+    
+    # s_c_w - string contains word, checks if word (surrounded by spaces, punctuation or start/end of string)
+    # is in the given string
+    def s_c_w(self, s, w):
+        return (re.compile(r'\b({0})\b'.format(w), flags=re.IGNORECASE).search(s) != None)
+
+    def find_table_type(self, title):
+        title = title.lower()
+        if self.s_c_w(title,"principal") or self.s_c_w(title,"investigator"):
+            return "principal_investigator"
+        elif self.s_c_w(title,"acronym") or self.s_c_w(title, "abbreviations"):
+            return "abbreviation"
+        elif self.s_c_w(title, "tid") or self.s_c_w(title, "see") or self.s_c_w(title, "dd") or self.s_c_w(title, "seu") or self.s_c_w(title, "let") or self.s_c_w(title, "ongoing") or self.s_c_w(title, "dose"):
+            return "rad"
+        return None
+
+    def get_header(self):
+        row = self.table.values.tolist()[0]
+        if row[0] == 0:
+            row = row[1:]
+        return row
+    
+    def get_row_density(self, index):
+        row = self.table.values.tolist()[index]
+        return (len(row) - (row.count("") + row.count(None)+row.count(NaN)+row.count(nan)))/ len(row) 
+
+    def get_row_type(self, index):
+        
