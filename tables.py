@@ -7,6 +7,8 @@ import re
 from numpy import NaN
 import pandas
 
+from fuzzywuzzy import fuzz, process
+
 # original pulled from https://stackoverflow.com/questions/58185404/python-pdf-parsing-with-camelot-and-extract-the-table-title
 # code has been modified to better handle target documents
 # Helper methods for _bbox
@@ -59,10 +61,11 @@ def get_tables_and_titles(pdf_filename, page):
     return titles, tables
 
 class Tables:
-    def __init__(self, table, title, type=None):
+    def __init__(self, table, title, type=None, ta_header = None):
         self.table = table
         self.title = title
         self.type = type
+        self.header = ta_header
     
     # s_c_w - string contains word, checks if word (surrounded by spaces, punctuation or start/end of string)
     # is in the given string
@@ -79,15 +82,38 @@ class Tables:
             return "rad"
         return None
 
-    def get_header(self):
+
+    def find_header(self):
         row = self.table.values.tolist()[0]
         if row[0] == 0:
             row = row[1:]
         return row
     
+    def get_header(self):
+        if self.header == None:
+            self.header = self.find_header()
+        return self.header
+
+
+    def header_mapping(self):
+        if self.header == None:
+            self.header = self.get_header()
+
+        for elem in self.header:
+            print(fuzz.partial_ratio("part number", elem))
+        
+
+
     def get_row_density(self, index):
         row = self.table.values.tolist()[index]
         return (len(row) - (row.count("") + row.count(None)+row.count(NaN)+row.count(nan)))/ len(row) 
 
-    def get_row_type(self, index):
+    def get_table_density(self):
+        '''returns table density(i.e. how many values are not empty'''
+        density = 0
+        for index, row in self.table.iterrows():
+            density += self.get_row_density(index)        
+        return density/(index+1)
+
+    # def get_row_type(self, index):
         

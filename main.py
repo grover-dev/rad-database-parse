@@ -10,6 +10,9 @@ import os
 from os import listdir
 from os.path import isfile, join
 
+from pdfminer.pdfparser import PDFParser
+from pdfminer.pdfdocument import PDFDocument
+import re
 import nltk
 # from nltk.tag.stanford import NERTagger
 
@@ -44,7 +47,8 @@ def create_tables(cursor):
                     degradation_level VARCHAR(255),
                     proton_fluence VARCHAR(255),
                     misc_info VARCHAR(1024),
-                    source_paper INTEGER NOT NULL
+                    source_paper INTEGER NOT NULL,
+                    source_paper_year INTEGER NOT NULL
                     ); """
 
     cursor.execute(rad_table)
@@ -64,16 +68,6 @@ def create_tables(cursor):
 
     # for cat in categories:
 
-
-
-
-
-
-
-def is_table_empty(table):
-    if table.df.apply(lambda x: x == '').any(axis=1).apply(lambda y: y== True).all(axis=0):
-        return True
-    return False
 
 
 def generate_abbreviations_list(table):
@@ -112,7 +106,15 @@ def abbreviation_expansion(abbrev_list, table):
 
 
 def get_pdf_title(path):
-    return os.path.basename(path)
+    fp = open(path, 'rb')
+    try:
+        parser = PDFParser(fp)
+        doc = PDFDocument(parser)
+        doc_info = doc.info[0]
+        return re.sub(r"b'",'',f"{(doc_info['Title'])}{doc_info['ModDate']}") 
+    except:
+        print(f"could not find pdf metadata for {path}, ignoring...")
+        return None
 
 def get_all_files(path):
     return [f for f in listdir(path) if isfile(join(path,f))]
@@ -123,30 +125,32 @@ def get_all_files(path):
 
 # work flow: get document, run through priocessing -> convert to temporary csv
 # -> check/correct/remove csv (manually rn) 
+# -> populate part information, manually insert result information + degradation info
 # -> add to radiation database (split up based on category (TID, SEE, etc.), if two papers for given value, put both down and cite both)
 # (each paper gets its own entry into database, even if part is repeated, unique ids are generated for each new part in database that is referenced by part databases) 
 # -> get parameters from manufacturer (based on category, get relevant info) 
 # -> add to part database and back reference the radiation (list unique ids)
 
-pdf_name =  'docs/NEPP-CP-2015-Campola-Paper-DW-NSREC-TN24941.pdf'
-print(get_all_files("docs/"))
-pdf = PdfFileReader(open(pdf_name,'rb'))
-num_pages = pdf.getNumPages()
-
+pdf_name =  'docs/2015-nasa-compendium.pdf'
+get_pdf_title(pdf_name)
+# pdf = PdfFileReader(open(pdf_name,'rb'))
+# num_pages = pdf.getNumPages()
+num_pages = 9
 tables_arr = []
 
-get_pdf_title(pdf_name)
+# get_pdf_title(pdf_name)
 for page in range(num_pages): 
     new_titles, new_tables = tb.get_tables_and_titles(pdf_name, page)
     for ti, ta in zip(new_titles, new_tables):
-        if not is_table_empty(ta):
+        tmp_table = Tables(table=ta.df, title=ti)
+
+        if tmp_table.get_table_density() > 0.25: # arbitrary cutoff for what counts as an empty table vs not
             if ti == '':
-                tmp = tables_arr[len(tables_arr)-1].table
-                if (ta.df[ta.df != ""].count().to_numpy().sum()/ ta.df[ta.df == ""].count().to_numpy().sum() >= 0.5):
-                    tmp = pandas.concat([tmp, ta.df.drop([0])])
-                    tables_arr[len(tables_arr)-1].table = tmp.reindex()
+                last_table = tables_arr[len(tables_arr)-1].table
+                last_table = pandas.concat([last_table, ta.df.drop([0])])
+                tables_arr[len(tables_arr)-1].table = last_table.reindex()
             else:
-                tables_arr.append(Tables(table=ta.df, title=ti))
+                tables_arr.append(tmp_table)
 abbreviations_table = []                
 
 
@@ -185,8 +189,10 @@ for ti in tables_arr:
     if "TABLE IV" in ti.title:
         print(ti.get_header()) 
         print(ti.get_row_density(3))
+        ti.header_mapping()
         # for index, row in ti.table.iterrows():
         #     print(row)
+
 
 
 # for ti in tables_arr:
