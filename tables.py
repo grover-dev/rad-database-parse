@@ -7,7 +7,11 @@ import math
 import re
 from numpy import NaN
 import pandas
+from PyPDF2 import PdfFileReader
 
+from pdfminer.pdfparser import PDFParser
+from pdfminer.pdfdocument import PDFDocument
+import re
 from fuzzywuzzy import fuzz, process
 
 # original pulled from https://stackoverflow.com/questions/58185404/python-pdf-parsing-with-camelot-and-extract-the-table-title
@@ -60,6 +64,69 @@ def get_tables_and_titles(pdf_filename, page):
             tmp = get_closest_text(table, htext_objs)
             titles.append(tmp)  # Might be None
     return titles, tables
+
+def get_pdf_title(path):
+    fp = open(path, 'rb')
+    try:
+        parser = PDFParser(fp)
+        doc = PDFDocument(parser)
+        doc_info = doc.info[0]
+        return re.sub(r"b'",'',f"{(doc_info['Title'])}{doc_info['ModDate']}") 
+    except:
+        print(f"could not find pdf metadata for {path}, ignoring...")
+        return None
+
+def get_all_tables(pdf_filename):
+    pdf = PdfFileReader(open(pdf_filename,'rb'))
+    num_pages = pdf.getNumPages()
+    get_pdf_title(pdf_filename)
+    
+    tables_arr = []    
+    for page in range(num_pages): 
+        new_titles, new_tables = get_tables_and_titles(pdf_filename, page)
+        for ti, ta in zip(new_titles, new_tables):
+            tmp_table = Tables(table=ta.df, title=ti)
+
+            if tmp_table.get_table_density() > 0.25: # arbitrary cutoff for what counts as an empty table vs not
+                if ti == '':
+                    last_table = tables_arr[len(tables_arr)-1].table
+                    last_table = pandas.concat([last_table, ta.df.drop([0])])
+                    tables_arr[len(tables_arr)-1].table = last_table.reindex()
+                else:
+                    tables_arr.append(tmp_table)
+
+    return tables_arr
+
+def csv_check(tables_arr):
+    # generate csvs for user to check if data parsed properly
+    for ti in tables_arr:
+        ti.table.to_csv(f'tmp_csvs/{ti.title}.csv')
+
+    input("verify that csvs were properly generated, press enter to continue...")
+
+    print("reloading csv information, deleting csvs...")
+    
+    tmp_arr = tables_arr.copy()
+    for ti in tables_arr:
+        if os.path.exists(f"tmp_csvs/{ti.title}.csv"):
+            ti.table = pandas.read_csv(f"tmp_csvs/{ti.title}.csv")
+            os.remove(f"tmp_csvs/{ti.title}.csv")
+        else:
+            tmp_arr.remove(ti)
+    return tmp_arr
+
+def type_check(tables_arr):
+    tmp_arr = tables_arr.copy()
+    for ti in tables_arr:
+        t_type = ti.find_table_type(ti.title)
+        if t_type != None:
+            ti.type= t_type
+        else:
+            print(f"could not find type for table: {ti.title}, dropping")
+            tmp_arr.remove(ti)
+    return tmp_arr
+
+
 
 class Tables:
     def __init__(self, table, title, type=None, ta_header = None):
