@@ -1,6 +1,7 @@
-
 import tables as tb
 from tables import Tables
+from database import Database
+
 
 from PyPDF2 import PdfFileReader
 import pandas
@@ -16,57 +17,7 @@ import re
 import nltk
 # from nltk.tag.stanford import NERTagger
 
-def connect_to_database(path):
-    conn = None
-    try:
-        conn = sqlite3.connect(path)
-    except Error as e:
-        print(e)
-    return conn
 
-def create_tables(cursor):
-    paper_table = """ CREATE TABLE IF NOT EXISTS paper_table (
-                      id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                      paper_name VARCHAR(1024)                      
-                  );"""
-    cursor.execute(paper_table)
-
-    rad_table = """ CREATE TABLE IF NOT EXISTS rad_table (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                    part_number VARCHAR(255) NOT NULL, 
-                    manufacturer VARCHAR(255) NOT NULL,
-                    tester_id VARCHAR(255),
-                    device_function VARCHAR(255) NOT NULL,
-                    category VARCHAR(255),
-                    technology VARCHAR(255),
-                    principal_investigator VARCHAR(255),
-                    results VARCHAR(1024) NOT NULL,
-                    in_spec BOOL,
-                    dose_rate VARCHAR(255),
-                    proton_energy VARCHAR(255),
-                    degradation_level VARCHAR(255),
-                    proton_fluence VARCHAR(255),
-                    misc_info VARCHAR(1024),
-                    source_paper INTEGER NOT NULL,
-                    source_paper_year INTEGER NOT NULL
-                    ); """
-
-    cursor.execute(rad_table)
-
-    # holds info on all abbreviations that are used in the documents 
-    # type specifies whether the abbreviation is for a term or for a principal investigator
-    abbreviation_table = """ CREATE TABLE IF NOT EXISTS abbreviation_table (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        abbreviation VARCHAR(255) NOT NULL,
-                        expansion VARCHAR(255) NOT NULL,
-                        type VARCHAR(255) NOT NULL,
-                        source_papers VARCHAR(1024) NOT NULL
-                        ); """
-    cursor.execute(abbreviation_table)
-    
-    # categories = ["operational_amplifiers", "memory", "transistors", "voltage_references", "voltage_regulators", ""]
-
-    # for cat in categories:
 
 
 
@@ -186,10 +137,9 @@ input("press enter to continue...")
 
 
 for ti in tables_arr:
-    if "TABLE IV" in ti.title:
-        print(ti.get_header()) 
-        print(ti.get_row_density(3))
-        ti.header_mapping()
+    # print(ti.title)
+    # print(ti.get_header()) 
+    print(ti.header_mapping())
         # for index, row in ti.table.iterrows():
         #     print(row)
 
@@ -204,7 +154,6 @@ for ti in tables_arr:
 
 if __name__ == '__main__':
     path = "main.db"
-    conn = connect_to_database(path)
-    cursor = conn.cursor()
-    create_tables(cursor)
-    conn.close()
+    db = Database(path)
+    db.create_tables()
+     

@@ -1,4 +1,5 @@
 from cmath import nan
+from gettext import Catalog
 import camelot
 from camelot.handlers import PDFHandler
 import os 
@@ -98,9 +99,50 @@ class Tables:
     def header_mapping(self):
         if self.header == None:
             self.header = self.get_header()
+        if self.type == "rad":
+            category = ["part number","manufacturer","device function", "technology", "results", "spec", "dose rate", "proton energy", "degradation level",  "proton fluence"]
+            cols = len(self.header)
+            rows = len(category)
 
-        for elem in self.header:
-            print(fuzz.partial_ratio("part number", elem))
+            matrix = []        
+            for elem in self.header:
+                elem = str(elem).strip().replace("\n","")
+                tmp = []
+                for cat in category:
+                    tmp_fuzz = fuzz.partial_ratio(cat, str(elem).lower())
+                    tmp.append(tmp_fuzz)
+                matrix.append(tmp)
+
+            max_arr = []
+            for col in range(cols):
+                max = 0
+                max_index = 0
+                for row in range(rows):
+                    if matrix[row][col] > max:
+                        max = matrix[row][col]
+                        max_index = row
+                    # elif matrix[row][col] == max:
+                if max >= 75:
+                    max_arr.append({category[col]:[max, max_index]})
+                else:
+                    max_arr.append({category[col]:[max,None]})
+            return max_arr
+        # for cat in category:
+        #     print(f"{cat}|", end = " ")
+        # for row, elem in zip(matrix, self.header):
+        #     elem = str(elem).strip().replace("\n","")
+        #     print(f"\n{elem}{' '*(50-len(elem))}", end="")
+        #     for col in row:
+        #         print(f"{col}{' '*(3-len(str(col)))}", end = " ")
+        # print(' ' * 50)
+        # for elem in max_arr:
+        #     print(f"{elem}{' '*(3-len(str(col)))}", end = " ")
+        # print()
+        # for elem in range(len(max_arr)):
+        #     for elem_2 in range(elem, len(max_arr)):
+        #         if max_arr[elem][2] == max_arr[elem_2][2] and elem != elem_2:
+        #             print(max_arr[elem], max_arr[elem_2])
+
         
 
 
