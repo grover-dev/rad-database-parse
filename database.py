@@ -14,6 +14,38 @@ class Database:
     def close_conn(self):
         self.cursor.close()
 
+    def add_entry_to_table(self, table, keys, values):
+        key_str = "("
+        value_str = "("
+        for k, v in zip(keys, values):
+            key_str += f"{k},"
+            v =v.replace(",", "|") 
+            value_str += f"'{v}',"
+        key_str = key_str[0:len(key_str)-1]
+        value_str = value_str[0:len(value_str)-1]
+        value_str = value_str.replace("\n"," ")
+        entry = f""" INSERT INTO {table} {key_str}) VALUES {value_str});"""
+        print(entry)
+
+        self.cursor.execute(entry)
+        self.conn.commit()
+
+
+    def add_to_entry_in_table(self, table, id_key, id_value, keys, values): 
+        key_str = ""
+        for k, v in zip(keys, values):
+            key_str += f"{k} = {v},\n"
+        key_str = key_str[0:len(key_str)-2]+")\n"
+        entry = f""" UPDATE {table} SET {key_str} WHERE {id_key} = {id_value};"""
+        self.cursor.execute(entry)
+
+
+
+    def delete_entry_from_table(self, table, id_key, id_value):
+        entry = f""" DELETE FROM {table} WHERE {id_key} = {id_value};"""
+        self.cursor.execute(entry)
+
+
 
     def create_tables(self):
         cursor = self.cursor
@@ -33,15 +65,16 @@ class Database:
                         technology VARCHAR(255),
                         principal_investigator VARCHAR(255),
                         results VARCHAR(1024) NOT NULL,
-                        in_spec BOOL,
+                        spec BOOL,
                         dose_rate VARCHAR(255),
                         proton_energy VARCHAR(255),
                         degradation_level VARCHAR(255),
                         proton_fluence VARCHAR(255),
                         misc_info VARCHAR(1024),
-                        source_paper INTEGER NOT NULL,
-                        source_paper_year INTEGER NOT NULL
+                        source_paper INTEGER NOT NULL
                         ); """
+                        # source_paper_year INTEGER NOT NULL
+
 
         cursor.execute(rad_table)
 

@@ -1,5 +1,6 @@
 import tables as tb
 from tables import Tables
+# import database as db
 from database import Database
 
 
@@ -60,15 +61,11 @@ def get_all_files(path):
 # -> add to part database and back reference the radiation (list unique ids)
 
 pdf_name =  'docs/2015-nasa-compendium.pdf'
-num_pages = 9
-tables_arr = tb.get_all_tables(pdf_name)
-tables_arr = tb.csv_check(tables_arr)
-tables_arr = tb.type_check(tables_arr)
 
 
 
-for ti in tables_arr:
-    print(ti.header_mapping())
+
+
 
 
 
@@ -79,4 +76,19 @@ if __name__ == "__main__":
     path = "main.db"
     db = Database(path)
     db.create_tables()
-     
+        
+    tables = tb.get_all_tables(pdf_name)
+    tables = tb.csv_check(tables)
+    tables = tb.type_check(tables)
+    
+    for ta in tables:
+        ta.map_header()
+        if ta.mapped_header != None:
+            for row in range(1, ta.get_num_rows()):
+                if ta.get_mapped_row_type(row) == "valid":
+                    keys, values = ta.map_row(row)
+                    db.add_entry_to_table("rad_table",keys,values)
+                # print(ta.get_row(row))
+    db.close_conn()
+    # for ta in tables:
+        

@@ -71,7 +71,7 @@ def get_pdf_title(path):
         parser = PDFParser(fp)
         doc = PDFDocument(parser)
         doc_info = doc.info[0]
-        return re.sub(r"b'",'',f"{(doc_info['Title'])}{doc_info['ModDate']}") 
+        return re.sub(r"b'",'',f"{(doc_info['Title'])}{doc_info['ModDate']}").replace("'","")
     except:
         print(f"could not find pdf metadata for {path}, ignoring...")
         return None
@@ -79,13 +79,12 @@ def get_pdf_title(path):
 def get_all_tables(pdf_filename):
     pdf = PdfFileReader(open(pdf_filename,'rb'))
     num_pages = pdf.getNumPages()
-    get_pdf_title(pdf_filename)
     
     tables_arr = []    
     for page in range(num_pages): 
         new_titles, new_tables = get_tables_and_titles(pdf_filename, page)
         for ti, ta in zip(new_titles, new_tables):
-            tmp_table = Tables(table=ta.df, title=ti)
+            tmp_table = Tables(table=ta.df, title=ti, source_paper = get_pdf_title(pdf_filename))
 
             if tmp_table.get_table_density() > 0.25: # arbitrary cutoff for what counts as an empty table vs not
                 if ti == '':
@@ -100,7 +99,7 @@ def get_all_tables(pdf_filename):
 def csv_check(tables_arr):
     # generate csvs for user to check if data parsed properly
     for ti in tables_arr:
-        ti.table.to_csv(f'tmp_csvs/{ti.title}.csv')
+        ti.table.to_csv(f'tmp_csvs/{ti.title}.csv', index=False)
 
     input("verify that csvs were properly generated, press enter to continue...")
 
@@ -109,7 +108,7 @@ def csv_check(tables_arr):
     tmp_arr = tables_arr.copy()
     for ti in tables_arr:
         if os.path.exists(f"tmp_csvs/{ti.title}.csv"):
-            ti.table = pandas.read_csv(f"tmp_csvs/{ti.title}.csv")
+            ti.table = pandas.read_csv(f"tmp_csvs/{ti.title}.csv", index_col=False)
             os.remove(f"tmp_csvs/{ti.title}.csv")
         else:
             tmp_arr.remove(ti)
@@ -126,20 +125,22 @@ def type_check(tables_arr):
             tmp_arr.remove(ti)
     return tmp_arr
 
-
-
 class Tables:
-    def __init__(self, table, title, type=None, ta_header = None):
+    def __init__(self, table, title, type=None, ta_header = None, mapped_header = None, source_paper = None):
         self.table = table
         self.title = title
         self.type = type
         self.header = ta_header
+        self.mapped_header = mapped_header
+        self.source_paper = source_paper
     
     # s_c_w - string contains word, checks if word (surrounded by spaces, punctuation or start/end of string)
     # is in the given string
     def s_c_w(self, s, w):
         return (re.compile(r'\b({0})\b'.format(w), flags=re.IGNORECASE).search(s) != None)
 
+    # find the type of the table 
+    # todo: switch to using fuzzy matching
     def find_table_type(self, title):
         title = title.lower()
         if self.s_c_w(title,"principal") or self.s_c_w(title,"investigator"):
@@ -150,22 +151,22 @@ class Tables:
             return "rad"
         return None
 
-
-    def find_header(self):
-        row = self.table.values.tolist()[0]
-        if row[0] == 0:
-            row = row[1:]
-        return row
-    
+    # get the header
     def get_header(self):
         if self.header == None:
-            self.header = self.find_header()
-        return self.header
+            row = self.table.values.tolist()[0]
+            if row[0] == 0:
+                row = row[1:]
+            return row
+        else:
+            return self.header
 
-
-    def header_mapping(self):
+    # map the header to column in database
+    # todo: may need to rework to deal with tables from poorly made pdfs 
+    def map_header(self):
         if self.header == None:
             self.header = self.get_header()
+            #todo - modify check here
         if self.type == "rad":
             category = ["part number","manufacturer","device function", "technology", "results", "spec", "dose rate", "proton energy", "degradation level",  "proton fluence"]
             cols = len(self.header)
@@ -180,7 +181,7 @@ class Tables:
                     tmp.append(tmp_fuzz)
                 matrix.append(tmp)
 
-            max_arr = []
+            max_arr = {}
             for col in range(cols):
                 max = 0
                 max_index = 0
@@ -190,10 +191,10 @@ class Tables:
                         max_index = row
                     # elif matrix[row][col] == max:
                 if max >= 75:
-                    max_arr.append({category[col]:[max, max_index]})
+                    max_arr[category[col].replace(" ", "_")] = [max, max_index]
                 else:
-                    max_arr.append({category[col]:[max,None]})
-            return max_arr
+                    max_arr[category[col].replace(" ", "_")] = [max,None]
+            self.mapped_header = max_arr
         # for cat in category:
         #     print(f"{cat}|", end = " ")
         # for row, elem in zip(matrix, self.header):
@@ -210,12 +211,31 @@ class Tables:
         #         if max_arr[elem][2] == max_arr[elem_2][2] and elem != elem_2:
         #             print(max_arr[elem], max_arr[elem_2])
 
-        
+    def get_num_rows(self):
+        return len(self.table.values.tolist())
 
+    def get_row(self, index):
+        return self.table.values.tolist()[index]
 
     def get_row_density(self, index):
-        row = self.table.values.tolist()[index]
+        row = self.get_row(index)
         return (len(row) - (row.count("") + row.count(None)+row.count(NaN)+row.count(nan)))/ len(row) 
+
+
+    def map_row(self, index):
+        row = self.get_row(index)
+        
+        if self.mapped_header == None:
+            self.map_header()
+        keys = []
+        values = []
+        for col in self.mapped_header:
+            keys.append(col)
+            values.append(row[self.mapped_header[col][1]])
+        keys.append('source_paper')
+        values.append(self.source_paper)
+        
+        return keys, values
 
     def get_table_density(self):
         '''returns table density(i.e. how many values are not empty'''
@@ -224,5 +244,22 @@ class Tables:
             density += self.get_row_density(index)        
         return density/(index+1)
 
-    # def get_row_type(self, index):
-        
+
+    def get_mapped_row_type(self, index):
+        try:
+            mp_keys, mp_values = self.map_row(index)
+
+            density = (len(mp_values) - (mp_values.count("") + mp_values.count(None)+mp_values.count(NaN)+mp_values.count(nan))) / len (mp_values)
+            if density < 0.5:
+                return "invalid"
+            return "valid"
+        except:
+            return "invalid"  
+
+
+
+class Part:
+    def __init__(self, keys, values):
+        self.keys = keys
+        self.values = values
+    
