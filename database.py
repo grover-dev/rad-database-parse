@@ -1,5 +1,7 @@
 import sqlite3
 from sqlite3 import Error
+from tkinter.messagebox import NO
+
 
 class Database:
     def __init__(self, path):
@@ -15,20 +17,20 @@ class Database:
         self.cursor.close()
 
     def add_entry_to_table(self, table, keys, values):
-        key_str = "("
-        value_str = "("
-        for k, v in zip(keys, values):
-            key_str += f"{k},"
-            v =v.replace(",", "|") 
-            value_str += f"'{v}',"
-        key_str = key_str[0:len(key_str)-1]
-        value_str = value_str[0:len(value_str)-1]
-        value_str = value_str.replace("\n"," ")
-        entry = f""" INSERT INTO {table} {key_str}) VALUES {value_str});"""
-        print(entry)
+        if not self.check_if_exists(table,keys,values):
 
-        self.cursor.execute(entry)
-        self.conn.commit()
+            key_str = "("
+            value_str = "("
+            for k, v in zip(keys, values):
+                key_str += f"{k},"
+                value_str += f"'{v}',"
+            key_str = key_str[0:len(key_str)-1]
+            value_str = value_str[0:len(value_str)-1]
+            value_str = value_str.replace("\n"," ")
+            entry = f""" INSERT INTO {table} {key_str}) VALUES {value_str});"""
+
+            self.cursor.execute(entry)
+            self.conn.commit()
 
 
     def add_to_entry_in_table(self, table, id_key, id_value, keys, values): 
@@ -39,10 +41,34 @@ class Database:
         entry = f""" UPDATE {table} SET {key_str} WHERE {id_key} = {id_value};"""
         self.cursor.execute(entry)
 
+    def check_if_exists(self, table, id_key, id_value):
+        if type(id_key) != list:
+            id_key = [id_key]
+        if type(id_value) !=  list:
+            id_value = [id_value]
+        entry =""
+        if len(id_key) > 1:
+            tmp = ""
+            for key, value in zip(id_key, id_value):
+                tmp += f"{key} = \"{value}\"\nAND "
+            tmp = tmp [:len(tmp)-4]
+            entry = f"SELECT EXISTS(SELECT 1 FROM {table} WHERE {tmp} LIMIT 1);"            
+        else:
+            entry = f"SELECT EXISTS(SELECT 1 FROM {table} WHERE {id_key[0]} = \"{id_value[0]}\" LIMIT 1);"            
+
+        print(self.cursor.execute(entry).fetchone()[0])
+        if self.cursor.execute(entry).fetchone()[0] == 0 or self.cursor.execute(entry).fetchone()[0] == None:
+            return False
+        return True
+
+        
 
 
-    def delete_entry_from_table(self, table, id_key, id_value):
-        entry = f""" DELETE FROM {table} WHERE {id_key} = {id_value};"""
+    def delete_entry_from_table(self, table, id_key, id_value, limit=1):
+        if limit == None:   
+            entry = f""" DELETE FROM {table} WHERE {id_key} = {id_value};"""
+        else:   
+            entry = f""" DELETE FROM {table} WHERE {id_key} = {id_value} LIMIT {limit};"""
         self.cursor.execute(entry)
 
 

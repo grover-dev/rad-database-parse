@@ -1,4 +1,5 @@
 from cmath import nan
+from distutils.dir_util import copy_tree
 import camelot
 from camelot.handlers import PDFHandler
 import os 
@@ -51,7 +52,7 @@ def get_closest_text(table, htext_objs):
 def get_tables_and_titles(pdf_filename, page):
     """Here's my hacky code for grabbing tables and guessing at their titles"""
     my_handler = PDFHandler(pdf_filename)  # from camelot.handlers import PDFHandler
-    tables = camelot.read_pdf(pdf_filename, pages=f'{page}', line_scale=40, flavor = 'lattice')
+    tables = camelot.read_pdf(pdf_filename, pages=f'{page}', line_scale=40, flavor = 'lattice', copy_text=['v'])
     print('Extracting {:d} tables...'.format(tables.n))
     titles = []
     with camelot.utils.TemporaryDirectory() as tempdir:
@@ -229,13 +230,23 @@ class Tables:
         keys = []
         values = []
         for col in self.mapped_header:
-            if self.mapped_header[col][1] != None:
-            # try:
-                keys.append(col)
-                values.append(row[self.mapped_header[col][1]].replace("\n"," "))
-            # except:
-            #     print(col, row)
-            #     input("enter to continue")
+            column_mapping = self.mapped_header[col][1]
+            if column_mapping != None:
+                value =  row[column_mapping]
+                try:
+                    # if value != None and value != nan and value != NaN and not math.isnan(value):
+                    # try:
+                        keys.append(col)
+                        if type(value) == str:
+                            values.append(value.replace("\n"," "))
+                        elif type(value) == int:
+                            values.append(value)
+                        else:
+                            raise Exception("null val")
+                except:
+                    #  print(col, value, type(value))
+                    raise Exception("null val")
+                #     input("enter to continue")
         keys.append('source_paper')
         values.append(self.source_paper)
         
@@ -252,8 +263,9 @@ class Tables:
     def get_mapped_row_type(self, index):
         try:
             mp_keys, mp_values = self.map_row(index)
-
-            density = (len(mp_values) - (mp_values.count("") + mp_values.count(None)+mp_values.count(NaN)+mp_values.count(nan))) / len (mp_values)
+            if self.mapped_header == None:
+                self.map_header()
+            density = (len(mp_values) - (mp_values.count("") + mp_values.count(None)+mp_values.count(NaN)+mp_values.count(nan))) / len (self.mapped_header)
             if density < 0.5:
                 # print(mp_values)
                 return "invalid"

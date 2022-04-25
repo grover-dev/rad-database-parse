@@ -85,7 +85,8 @@ if __name__ == "__main__":
     for file in os.listdir("docs/"):
         filename = os.fsdecode(file)
         state = db.check_if_exists("rad_table", "source_paper", tb.get_pdf_title(f'docs/{str(filename)}'))
-        if filename.endswith(".pdf") and not state:
+        if "2015" in filename:
+        # if filename.endswith(".pdf") and not state:
             print(filename)
             tables = tb.get_all_tables(f'docs/{str(filename)}')
             tables = tb.csv_check(tables)
