@@ -1,5 +1,4 @@
 from cmath import nan
-from distutils.dir_util import copy_tree
 import camelot
 from camelot.handlers import PDFHandler
 import os 
