@@ -3,7 +3,7 @@ from tables import Tables
 # import database as db
 from database import Database
 
-
+import os
 from os import listdir
 from os.path import isfile, join
 
@@ -60,35 +60,45 @@ def get_all_files(path):
 # -> get parameters from manufacturer (based on category, get relevant info) 
 # -> add to part database and back reference the radiation (list unique ids)
 
+
+
+
+""" feature list:
+    - parametric search for radiation tolerance/behavior?
+    - parametric search for parts, 
+    - be able to link parts that have no formal radiation testing but have been used on missions 
+        - include mission state (failure/success)
+    - have process for adding new parts by users (also solicit support from others)
+
+
+"""
+
+
+
 pdf_name =  'docs/2015-nasa-compendium.pdf'
-
-
-
-
-
-
-
-
-
-
 
 if __name__ == "__main__":
     path = "main.db"
     db = Database(path)
     db.create_tables()
-        
-    tables = tb.get_all_tables(pdf_name)
-    tables = tb.csv_check(tables)
-    tables = tb.type_check(tables)
-    
-    for ta in tables:
-        ta.map_header()
-        if ta.mapped_header != None:
-            for row in range(1, ta.get_num_rows()):
-                if ta.get_mapped_row_type(row) == "valid":
-                    keys, values = ta.map_row(row)
-                    db.add_entry_to_table("rad_table",keys,values)
-                # print(ta.get_row(row))
+
+    for file in os.listdir("docs/"):
+        filename = os.fsdecode(file)
+        state = db.check_if_exists("rad_table", "source_paper", tb.get_pdf_title(f'docs/{str(filename)}'))
+        if filename.endswith(".pdf") and not state:
+            print(filename)
+            tables = tb.get_all_tables(f'docs/{str(filename)}')
+            tables = tb.csv_check(tables)
+            tables = tb.type_check(tables)
+            
+            for ta in tables:
+                ta.map_header()
+                if ta.mapped_header != None:
+                    for row in range(1, ta.get_num_rows()):
+                        if ta.get_mapped_row_type(row) == "valid":
+                            keys, values = ta.map_row(row)
+                            db.add_entry_to_table("rad_table",keys,values)
+                        # print(ta.get_row(row))
     db.close_conn()
     # for ta in tables:
         

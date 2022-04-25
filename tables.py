@@ -1,5 +1,4 @@
 from cmath import nan
-from gettext import Catalog
 import camelot
 from camelot.handlers import PDFHandler
 import os 
@@ -71,7 +70,7 @@ def get_pdf_title(path):
         parser = PDFParser(fp)
         doc = PDFDocument(parser)
         doc_info = doc.info[0]
-        return re.sub(r"b'",'',f"{(doc_info['Title'])}{doc_info['ModDate']}").replace("'","")
+        return re.sub(r"b'",'',f"{(doc_info['Title'])}{doc_info['ModDate']}").replace("'","").replace("\"","")
     except:
         print(f"could not find pdf metadata for {path}, ignoring...")
         return None
@@ -230,8 +229,13 @@ class Tables:
         keys = []
         values = []
         for col in self.mapped_header:
-            keys.append(col)
-            values.append(row[self.mapped_header[col][1]])
+            if self.mapped_header[col][1] != None:
+            # try:
+                keys.append(col)
+                values.append(row[self.mapped_header[col][1]].replace("\n"," "))
+            # except:
+            #     print(col, row)
+            #     input("enter to continue")
         keys.append('source_paper')
         values.append(self.source_paper)
         
@@ -251,9 +255,14 @@ class Tables:
 
             density = (len(mp_values) - (mp_values.count("") + mp_values.count(None)+mp_values.count(NaN)+mp_values.count(nan))) / len (mp_values)
             if density < 0.5:
+                # print(mp_values)
                 return "invalid"
             return "valid"
-        except:
+        except Exception as e:
+            # print(e)
+            # print(self.table.values.tolist())
+            # print(self.get_row(index))
+            # input("enter to continue")
             return "invalid"  
 
 
