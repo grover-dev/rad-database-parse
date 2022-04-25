@@ -81,11 +81,12 @@ def get_all_tables(pdf_filename):
     num_pages = pdf.getNumPages()
     
     tables_arr = []    
+    if get_pdf_title(pdf_filename) == None:
+        return None
     for page in range(num_pages): 
         new_titles, new_tables = get_tables_and_titles(pdf_filename, page)
         for ti, ta in zip(new_titles, new_tables):
             tmp_table = Tables(table=ta.df, title=ti, source_paper = get_pdf_title(pdf_filename))
-
             if tmp_table.get_table_density() > 0.25: # arbitrary cutoff for what counts as an empty table vs not
                 if ti == '':
                     last_table = tables_arr[len(tables_arr)-1].table
@@ -147,7 +148,7 @@ class Tables:
             return "principal_investigator"
         elif self.s_c_w(title,"acronym") or self.s_c_w(title, "abbreviations"):
             return "abbreviation"
-        elif self.s_c_w(title, "tid") or self.s_c_w(title, "see") or self.s_c_w(title, "dd") or self.s_c_w(title, "seu") or self.s_c_w(title, "let") or self.s_c_w(title, "ongoing") or self.s_c_w(title, "dose"):
+        elif self.s_c_w(title, "tid") or self.s_c_w(title, "see") or self.s_c_w(title, "dd") or self.s_c_w(title, "ddd") or self.s_c_w(title, "seu") or self.s_c_w(title, "let") or self.s_c_w(title, "ongoing") or self.s_c_w(title, "dose") or self.s_c_w(title,"result"):
             return "rad"
         return None
 
@@ -168,16 +169,21 @@ class Tables:
             self.header = self.get_header()
             #todo - modify check here
         if self.type == "rad":
-            category = ["part number","manufacturer","device function", "technology", "results", "spec", "dose rate", "proton energy", "degradation level",  "proton fluence"]
-            cols = len(self.header)
-            rows = len(category)
+            category = ["part number","manufacturer","device function", "technology", "results", "spec", "dose rate", "proton energy", "degradation level", "proton fluence"]
+            rows = len(self.header)
+            cols = len(category)
 
             matrix = []        
             for elem in self.header:
-                elem = str(elem).strip().replace("\n","")
+                elem = str(elem).strip().replace("\n","").lower()
                 tmp = []
                 for cat in category:
-                    tmp_fuzz = fuzz.partial_ratio(cat, str(elem).lower())
+                    tmp_fuzz = 0
+                    if cat == category[8]:
+                        tmp_fuzz = fuzz.partial_ratio("deg level", elem)
+
+                    if tmp_fuzz < fuzz.partial_ratio(cat, elem):
+                        tmp_fuzz = fuzz.partial_ratio(cat, elem)
                     tmp.append(tmp_fuzz)
                 matrix.append(tmp)
 
@@ -232,7 +238,7 @@ class Tables:
         for col in self.mapped_header:
             column_mapping = self.mapped_header[col][1]
             if column_mapping != None:
-                value =  row[column_mapping]
+                value = row[column_mapping]
                 try:
                     # if value != None and value != nan and value != NaN and not math.isnan(value):
                     # try:
@@ -270,11 +276,7 @@ class Tables:
                 # print(mp_values)
                 return "invalid"
             return "valid"
-        except Exception as e:
-            # print(e)
-            # print(self.table.values.tolist())
-            # print(self.get_row(index))
-            # input("enter to continue")
+        except:
             return "invalid"  
 
 

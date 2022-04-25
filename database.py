@@ -50,13 +50,13 @@ class Database:
         if len(id_key) > 1:
             tmp = ""
             for key, value in zip(id_key, id_value):
-                tmp += f"{key} = \"{value}\"\nAND "
+                tmp_value = value.replace("\"","").replace("\'","")
+                tmp += f"{key} = \"{tmp_value}\"\nAND "
             tmp = tmp [:len(tmp)-4]
             entry = f"SELECT EXISTS(SELECT 1 FROM {table} WHERE {tmp} LIMIT 1);"            
         else:
             entry = f"SELECT EXISTS(SELECT 1 FROM {table} WHERE {id_key[0]} = \"{id_value[0]}\" LIMIT 1);"            
 
-        print(self.cursor.execute(entry).fetchone()[0])
         if self.cursor.execute(entry).fetchone()[0] == 0 or self.cursor.execute(entry).fetchone()[0] == None:
             return False
         return True
