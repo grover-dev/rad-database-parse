@@ -237,7 +237,7 @@ class Tables:
         keys.append('source_paper')
         values.append(self.source_paper)
         keys.append('source_paper_filename')
-        values.append(self.source_paper)
+        values.append(self.source_paper_filename)
         
         return keys, values
 

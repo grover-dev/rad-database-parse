@@ -7,10 +7,13 @@ import os
 from os import listdir
 from os.path import isfile, join
 
+import argparse
 
+parser = argparse.ArgumentParser(description='parse nasa radiation compendium docs.')
+parser.add_argument('--csv_bypass', dest="csv_bypass", default=False, action='store_true', help="bypass csv check")
 
-
-
+args = parser.parse_args()
+print(args.csv_bypass)
 
 def generate_abbreviations_list(table):
     abbrev_to_text_list = []
@@ -90,7 +93,8 @@ if __name__ == "__main__":
             print(filename)
             tables = tb.get_all_tables(f'docs/{str(filename)}')
             if tables != None:
-                tables = tb.csv_check(tables)
+                if not args.csv_bypass:
+                    tables = tb.csv_check(tables)
                 tables = tb.type_check(tables)
                 
                 for ta in tables:
