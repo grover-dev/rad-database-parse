@@ -85,7 +85,7 @@ def get_all_tables(pdf_filename):
     for page in range(num_pages): 
         new_titles, new_tables = get_tables_and_titles(pdf_filename, page)
         for ti, ta in zip(new_titles, new_tables):
-            tmp_table = Tables(table=ta.df, title=ti, source_paper = get_pdf_title(pdf_filename))
+            tmp_table = Tables(table=ta.df, title=ti, source_paper = get_pdf_title(pdf_filename), source_paper_filename = os.path.basename(pdf_filename))
             if tmp_table.get_table_density() > 0.25: # arbitrary cutoff for what counts as an empty table vs not
                 if ti == '':
                     last_table = tables_arr[len(tables_arr)-1].table
@@ -126,13 +126,14 @@ def type_check(tables_arr):
     return tmp_arr
 
 class Tables:
-    def __init__(self, table, title, type=None, ta_header = None, mapped_header = None, source_paper = None):
+    def __init__(self, table, title, type=None, ta_header = None, mapped_header = None, source_paper = None, source_paper_filename = None):
         self.table = table
         self.title = title
         self.type = type
         self.header = ta_header
         self.mapped_header = mapped_header
         self.source_paper = source_paper
+        self.source_paper_filename = source_paper_filename
     
     # s_c_w - string contains word, checks if word (surrounded by spaces, punctuation or start/end of string)
     # is in the given string
@@ -200,21 +201,6 @@ class Tables:
                 else:
                     max_arr[category[col].replace(" ", "_")] = [max,None]
             self.mapped_header = max_arr
-        # for cat in category:
-        #     print(f"{cat}|", end = " ")
-        # for row, elem in zip(matrix, self.header):
-        #     elem = str(elem).strip().replace("\n","")
-        #     print(f"\n{elem}{' '*(50-len(elem))}", end="")
-        #     for col in row:
-        #         print(f"{col}{' '*(3-len(str(col)))}", end = " ")
-        # print(' ' * 50)
-        # for elem in max_arr:
-        #     print(f"{elem}{' '*(3-len(str(col)))}", end = " ")
-        # print()
-        # for elem in range(len(max_arr)):
-        #     for elem_2 in range(elem, len(max_arr)):
-        #         if max_arr[elem][2] == max_arr[elem_2][2] and elem != elem_2:
-        #             print(max_arr[elem], max_arr[elem_2])
 
     def get_num_rows(self):
         return len(self.table.values.tolist())
@@ -239,20 +225,18 @@ class Tables:
             if column_mapping != None:
                 value = row[column_mapping]
                 try:
-                    # if value != None and value != nan and value != NaN and not math.isnan(value):
-                    # try:
-                        keys.append(col)
-                        if type(value) == str:
-                            values.append(value.replace("\n"," "))
-                        elif type(value) == int:
-                            values.append(value)
-                        else:
-                            raise Exception("null val")
+                    keys.append(col)
+                    if type(value) == str:
+                        values.append(value.replace("\n"," "))
+                    elif type(value) == int:
+                        values.append(value)
+                    else:
+                        raise Exception("null val")
                 except:
-                    #  print(col, value, type(value))
                     raise Exception("null val")
-                #     input("enter to continue")
         keys.append('source_paper')
+        values.append(self.source_paper)
+        keys.append('source_paper_filename')
         values.append(self.source_paper)
         
         return keys, values

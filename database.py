@@ -96,7 +96,8 @@ class Database:
                         degradation_level VARCHAR(255),
                         proton_fluence VARCHAR(255),
                         misc_info VARCHAR(1024),
-                        source_paper INTEGER NOT NULL
+                        source_paper INTEGER NOT NULL,
+                        source_paper_filename VARCHAR(1024) NOT NULL
                         ); """
                         # source_paper_year INTEGER NOT NULL
 
